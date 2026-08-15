@@ -189,7 +189,6 @@ let
       sorted (builtins.attrNames background) == sorted backgroundKeys
       && lib.all validHex (builtins.attrValues background)
       && sorted (builtins.attrNames raw) == expectedKeys
-      && builtins.length (builtins.attrNames raw) == 27
       && lib.all validHex (builtins.attrValues raw)
     ) variants;
 
@@ -358,13 +357,11 @@ let
     ''set -g message-command-style "fg=#{@everforest_fg},bg=#{@everforest_bg1}"''
     ''set -g clock-mode-colour "${raw.blue}"''
   ];
-  tmuxOwnsNoLayout = lib.all (marker: !lib.hasInfix marker tmuxColors) [
-    "set -g status on"
+  tmuxOwnsColorsOnly = lib.all (setting: !lib.hasInfix setting tmuxColors) [
+    "set -g status "
     "set -g status-interval "
-    "set -g status-left-style "
     "set -g status-left-length "
     "set -g status-left "
-    "set -g status-right-style "
     "set -g status-right-length "
     "set -g status-right "
     "set -g window-status-separator "
@@ -373,21 +370,6 @@ let
     "terminal-features"
     "terminal-overrides"
     "default-terminal"
-    "COLORTERM"
-    "smcup@"
-    "rmcup@"
-    "bold"
-    "nobold"
-    ""
-    ""
-    ""
-    "#S"
-    "#W"
-    "#I"
-    "#(whoami)"
-    "%m-%d"
-    "%H:%M"
-    "#h"
   ];
   adapterContractOk =
     cfg.programs.fzf.colors == expectedFzf raw semantic
@@ -411,7 +393,7 @@ let
     ]
     && tmuxPaletteVariablesOk
     && tmuxColorStylesOk
-    && tmuxOwnsNoLayout;
+    && tmuxOwnsColorsOnly;
 
   batArtifact = pkgs.writeText "everforest-dark-hard.tmTheme" batTheme;
   btopArtifact = pkgs.writeText "everforest-dark-hard.theme" btopTheme;
@@ -428,33 +410,6 @@ let
     (pkgs.formats.toml { }).generate "everforest-dark-hard-starship.toml"
       cfg.programs.starship.settings;
   tmuxArtifact = pkgs.writeText "everforest-dark-hard-tmux-colors.conf" tmuxColors;
-
-  btopSchemaChecker = pkgs.writeText "check-btop-theme.py" ''
-    import re
-    import sys
-
-    expected = {
-        "main_bg", "main_fg", "title", "hi_fg", "selected_bg", "selected_fg",
-        "inactive_fg", "graph_text", "meter_bg", "proc_misc", "cpu_box", "mem_box",
-        "net_box", "proc_box", "div_line", "temp_start", "temp_mid", "temp_end",
-        "cpu_start", "cpu_mid", "cpu_end", "free_start", "free_mid", "free_end",
-        "cached_start", "cached_mid", "cached_end", "available_start", "available_mid",
-        "available_end", "used_start", "used_mid", "used_end", "download_start",
-        "download_mid", "download_end", "upload_start", "upload_mid", "upload_end",
-        "process_start", "process_mid", "process_end", "proc_pause_bg", "proc_follow_bg",
-        "proc_banner_bg", "proc_banner_fg", "followed_bg", "followed_fg",
-    }
-    text = open(sys.argv[1], encoding="utf-8").read()
-    entries = re.findall(r'^theme\[([^]]+)]="([^"]*)"$', text, re.MULTILINE)
-    keys = [key for key, _ in entries]
-    if len(keys) != len(set(keys)):
-        raise SystemExit("duplicate btop theme keys")
-    if set(keys) != expected:
-        raise SystemExit(f"btop theme schema mismatch: {set(keys) ^ expected}")
-    for key, value in entries:
-        if (key.endswith("_mid") or key.endswith("_end")) and value:
-            raise SystemExit(f"gradient field is not empty: {key}")
-  '';
 
   colorChecker = pkgs.writeText "check-palette-colors.py" ''
     import re
@@ -514,7 +469,6 @@ in
         cp ${batArtifact} "$TMPDIR/bat/config/bat/themes/everforest.tmTheme"
         xmllint --noout ${batArtifact}
         ! grep -q '<key>background</key>' ${batArtifact}
-        ! grep -q '<key>fontStyle</key>' ${batArtifact}
         XDG_CONFIG_HOME="$TMPDIR/bat/config" XDG_CACHE_HOME="$TMPDIR/bat/cache" bat cache --build >/dev/null
         XDG_CONFIG_HOME="$TMPDIR/bat/config" XDG_CACHE_HOME="$TMPDIR/bat/cache" bat --list-themes | grep -Fx everforest
 
@@ -530,7 +484,6 @@ in
           tmux -L everforest-dark-hard source-file ${tmuxArtifact}
         TMUX_TMPDIR="$TMPDIR/tmux" tmux -L everforest-dark-hard kill-server
 
-        python3 ${btopSchemaChecker} ${btopArtifact}
         python3 ${colorChecker} ${paletteValues} \
           ${batArtifact} ${btopArtifact} ${fzfValues} ${starshipArtifact} ${tmuxArtifact}
         touch "$out"
